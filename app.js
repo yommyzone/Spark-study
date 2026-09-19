@@ -296,6 +296,19 @@ async function startPaystackCheckout(planId) {
   });
 }
 
+async function renderProgress() {
+  if (!sparkClient) return;
+  const { data: userData } = await sparkClient.auth.getUser();
+  if (!userData.user) { document.getElementById('openAuth').click(); return; }
+  const { data: sessions = [] } = await sparkClient.from('study_sessions').select('*').order('completed_at', { ascending: false }).limit(50);
+  const answered = sessions.reduce((sum, item) => sum + (item.total_questions || 0), 0);
+  const correct = sessions.reduce((sum, item) => sum + (item.score || 0), 0);
+  const accuracy = answered ? Math.round(correct / answered * 100) : 0;
+  const bars = sessions.slice(0, 8).reverse().map(item => `<div class="progress-bar-col"><span style="height:${item.total_questions ? Math.max(8, item.score / item.total_questions * 100) : 8}%"></span><small>${Math.round(item.total_questions ? item.score / item.total_questions * 100 : 0)}%</small></div>`).join('');
+  document.getElementById('app').innerHTML = `<div class="progress-view"><div class="library-heading"><div><p class="eyebrow">YOUR LEARNING SIGNALS</p><h1>Progress</h1><p>See what you’re retaining and where your next Spark should go.</p></div><button class="back-button" id="progressBack">← Overview</button></div><div class="progress-metrics"><div><span>Sessions</span><strong>${sessions.length}</strong></div><div><span>Questions</span><strong>${answered}</strong></div><div><span>Correct</span><strong>${correct}</strong></div><div><span>Accuracy</span><strong>${accuracy}%</strong></div></div><div class="progress-panel"><div class="section-heading"><div><p class="eyebrow">SESSION ACCURACY</p><h2>Recent performance</h2></div><span class="progress-caption">${sessions.length ? 'Latest sessions' : 'Complete a session to begin'}</span></div><div class="progress-chart">${bars || '<div class="progress-empty">Your completed sessions will appear here.</div>'}</div></div><div class="progress-panel"><p class="eyebrow">SESSION HISTORY</p><div class="history-list">${sessions.slice(0, 8).map(item => `<div class="history-row"><strong>Biology session</strong><span>${new Date(item.completed_at).toLocaleDateString()}</span><b>${item.score}/${item.total_questions}</b></div>`).join('') || '<div class="progress-empty">No saved sessions yet.</div>'}</div></div></div>`;
+  document.getElementById('progressBack').addEventListener('click', renderOverview);
+}
+
 function renderSettings() {
   const plans = (window.SPARK_PRICING || []).map(plan => `<div class="plan-card ${plan.popular ? 'featured' : ''}">${plan.popular ? '<span class="plan-badge">MOST POPULAR</span>' : ''}<p>${plan.label}</p><strong>₦${plan.amountNgn.toLocaleString()}</strong><span>Premium access</span><button class="secondary-button plan-button" data-plan="${plan.id}">Choose plan</button></div>`).join('');
   document.getElementById('app').innerHTML = `<div class="settings-view"><div class="settings-heading"><p class="eyebrow">YOUR ACCOUNT</p><h1>Settings</h1><p>Manage your Spark Study account and choose a Premium plan when you’re ready.</p></div><div class="settings-section"><div><p class="eyebrow">SPARK PREMIUM</p><h2>Study without limits.</h2><p>Free users can keep up to 10 active materials. Premium unlocks higher limits, faster processing and more study capacity.</p></div><div class="plans-grid">${plans}</div></div><button class="back-button settings-back" id="settingsBack">← Back to overview</button></div>`;
@@ -317,7 +330,7 @@ document.querySelectorAll('[data-view]').forEach(button => {
     const view = button.dataset.view;
     if (view === 'sessions') { const start = document.getElementById('startSession'); if (start) start.click(); else if (typeof renderQuiz === 'function') renderQuiz(); }
     else if (view === 'library') renderLibrary();
-    else if (view === 'progress') showToast('Detailed progress reports are coming next.');
+    else if (view === 'progress') renderProgress();
     else if (view === 'settings') renderSettings();
     else if (view === 'overview') showToast('You’re already on your overview.');
   });
