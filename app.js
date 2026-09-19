@@ -4,7 +4,7 @@ let authMode = 'signin';
 if (window.supabase && window.SPARK_SUPABASE_URL && window.SPARK_SUPABASE_PUBLISHABLE_KEY) {
   sparkClient = window.supabase.createClient(window.SPARK_SUPABASE_URL, window.SPARK_SUPABASE_PUBLISHABLE_KEY);
   sparkClient.auth.getSession().then(({ data }) => { updateAuthUI(data.session); loadDashboardData(data.session); });
-  sparkClient.auth.onAuthStateChange((_event, session) => { updateAuthUI(session); loadDashboardData(session); });
+  sparkClient.auth.onAuthStateChange((event, session) => { updateAuthUI(session); loadDashboardData(session); if (event === 'PASSWORD_RECOVERY') openPasswordReset(); });
 }
 
 const authModal = document.getElementById('authModal');
@@ -61,6 +61,20 @@ async function loadDashboardData(session) {
   }).join('');
 }
 
+function openPasswordReset() {
+  authMode = 'reset';
+  authModal.classList.add('show');
+  authTitle.textContent = 'Set a new password.';
+  authCopy.textContent = 'Choose a new password for your Spark Study account.';
+  authSubmit.innerHTML = 'Update password <span>→</span>';
+  document.getElementById('authEmailLabel').style.display = 'none';
+  document.getElementById('authEmail').required = false;
+  document.getElementById('forgotPassword').style.display = 'none';
+  switchAuth.style.display = 'none';
+  document.getElementById('googleAuth').style.display = 'none';
+  document.querySelector('.auth-divider').style.display = 'none';
+}
+
 document.getElementById('closeAuth').addEventListener('click', () => authModal.classList.remove('show'));
 authModal.addEventListener('click', e => { if (e.target === authModal) authModal.classList.remove('show'); });
 switchAuth.addEventListener('click', () => {
@@ -86,9 +100,11 @@ authForm.addEventListener('submit', async e => {
   authSubmit.disabled = true;
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
-  const result = authMode === 'signin'
-    ? await sparkClient.auth.signInWithPassword({ email, password })
-    : await sparkClient.auth.signUp({ email, password });
+  const result = authMode === 'reset'
+    ? await sparkClient.auth.updateUser({ password })
+    : authMode === 'signin'
+      ? await sparkClient.auth.signInWithPassword({ email, password })
+      : await sparkClient.auth.signUp({ email, password });
   authSubmit.disabled = false;
   if (result.error) { authStatus.textContent = result.error.message; return; }
   if (authMode === 'signup' && !result.data.session) authStatus.textContent = 'Account created. Check your email to confirm, then sign in.';
@@ -299,7 +315,7 @@ document.querySelectorAll('[data-view]').forEach(button => {
     if (button.classList.contains('nav-item')) button.classList.add('active');
     sidebar.classList.remove('open');
     const view = button.dataset.view;
-    if (view === 'sessions') showToast('Your session schedule is coming next.');
+    if (view === 'sessions') { const start = document.getElementById('startSession'); if (start) start.click(); else if (typeof renderQuiz === 'function') renderQuiz(); }
     else if (view === 'library') renderLibrary();
     else if (view === 'progress') showToast('Detailed progress reports are coming next.');
     else if (view === 'settings') renderSettings();
