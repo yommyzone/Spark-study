@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#17231f" />
+  <meta name="description" content="Spark Study — your focused study coach." />
+  <title>Spark Study — Study smarter, remember longer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark"><span></span><span></span><span></span></div>
+        <div><strong>Spark</strong><small>study</small></div>
+      </div>
+      <button class="mobile-close" id="closeMenu" aria-label="Close menu">×</button>
+      <nav class="nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="overview"><span class="nav-icon">⌂</span> Overview</button>
+        <button class="nav-item" data-view="sessions"><span class="nav-icon">◷</span> Spark sessions <b class="nav-badge">3</b></button>
+        <button class="nav-item" data-view="library"><span class="nav-icon">▤</span> My library</button>
+        <button class="nav-item" data-view="progress"><span class="nav-icon">↗</span> Progress</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="streak-card"><div class="streak-flame">✦</div><div><strong>4 day streak</strong><span>Keep the spark alive</span></div></div>
+        <button class="nav-item settings" data-view="settings"><span class="nav-icon">⚙</span> Settings</button>
+        <div class="profile"><div class="avatar">AO</div><div><strong>Alex Okafor</strong><span>Free plan</span></div><span class="profile-more">···</span></div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="menu-toggle" id="openMenu" aria-label="Open menu">☰</button>
+        <div class="breadcrumb"><span>Tuesday, September 18</span><span class="dot">•</span><strong>Good morning, Alex</strong></div>
+        <div class="top-actions"><button class="icon-button" title="Notifications">♧<i></i></button><button class="auth-button" id="openAuth">Sign in</button><button class="avatar top-avatar" id="accountAvatar">AO</button></div>
+      </header>
+
+      <div class="page" id="app">
+        <section class="hero-row">
+          <div><p class="eyebrow">YOUR DAILY RHYTHM <span class="spark-dot"></span></p><h1>Make today<br /><em>count.</em></h1><p class="hero-copy">A little progress, every day. Your next Spark session is ready when you are.</p></div>
+          <div class="hero-orb"><div class="orb-glow"></div><div class="orb-ring ring-one"></div><div class="orb-ring ring-two"></div><div class="orb-core">✦</div></div>
+        </section>
+
+        <section class="stats-grid" aria-label="Study statistics">
+          <div class="stat-card"><div class="stat-label">This week <span class="stat-icon green">↗</span></div><strong id="statTime">0m</strong><div class="stat-foot" id="statTimeFoot">Complete a session to track time</div></div>
+          <div class="stat-card"><div class="stat-label">Questions answered <span class="stat-icon purple">✧</span></div><strong id="statQuestions">0</strong><div class="stat-foot" id="statQuestionsFoot">No sessions yet</div></div>
+          <div class="stat-card"><div class="stat-label">Correct answers <span class="stat-icon green">✓</span></div><strong id="statCorrect">0</strong><div class="stat-foot" id="statCorrectFoot">Answer questions to build recall</div></div>
+          <div class="stat-card"><div class="stat-label">Current streak <span class="stat-icon orange">✦</span></div><strong id="statStreak">0 days</strong><div class="stat-foot">Keep showing up</div></div>
+          <div class="stat-card"><div class="stat-label">Overall mastery <span class="stat-icon blue">◎</span></div><strong id="statMastery">0%</strong><div class="stat-foot" id="statMasteryFoot">Your first score starts here</div></div>
+        </section>
+
+        <section class="content-grid">
+          <div class="primary-column">
+            <div class="section-heading"><div><p class="eyebrow">RECOMMENDED FOR YOU</p><h2>Your Spark session</h2></div><button class="text-button" data-view="sessions">View schedule <span>→</span></button></div>
+            <div class="session-card">
+              <div class="session-main"><div class="session-tag"><span class="live-dot"></span> READY TO GO</div><h3>Biology: Cell structure</h3><p>Review weak spots, reinforce key concepts, and test your recall.</p><div class="session-meta"><span>◷ 18 min</span><span>✧ 12 questions</span><span>▤ 3 topics</span></div><button class="primary-button" id="startSession">Start session <span>→</span></button></div>
+              <div class="session-visual"><div class="progress-ring"><div><strong>72%</strong><span>mastery</span></div></div><div class="visual-caption">You’re getting there.</div></div>
+            </div>
+            <div class="section-heading recent-heading"><div><p class="eyebrow">KEEP GOING</p><h2>Recent activity</h2></div><button class="text-button" data-view="progress">See all <span>→</span></button></div>
+            <div class="activity-list"><div class="activity-row"><div class="activity-icon biology">⌬</div><div class="activity-copy"><strong>Cell structure</strong><span>Biology · Quiz completed</span></div><div class="activity-score"><strong>8/10</strong><span>Today</span></div><div class="mini-progress"><span style="width:80%"></span></div></div><div class="activity-row"><div class="activity-icon chemistry">◈</div><div class="activity-copy"><strong>Organic chemistry basics</strong><span>Chemistry · Flashcards</span></div><div class="activity-score"><strong>24</strong><span>Yesterday</span></div><div class="mini-progress purple-bar"><span style="width:62%"></span></div></div><div class="activity-row"><div class="activity-icon maths">∑</div><div class="activity-copy"><strong>Quadratic equations</strong><span>Mathematics · Spark session</span></div><div class="activity-score"><strong>92%</strong><span>Sep 16</span></div><div class="mini-progress orange-bar"><span style="width:92%"></span></div></div></div>
+          </div>
+          <aside class="right-column">
+            <div class="section-heading compact"><div><p class="eyebrow">YOUR SUBJECTS</p><h2>Learning path</h2></div><button class="plus-button" id="addSubject" aria-label="Add subject">+</button></div>
+            <div class="subject-list"><div class="subject-card"><div class="subject-top"><div class="subject-icon biology">⌬</div><div><strong>Biology</strong><span>12 topics · 3 due</span></div><b>72%</b></div><div class="bar"><span style="width:72%"></span></div></div><div class="subject-card"><div class="subject-top"><div class="subject-icon chemistry">◈</div><div><strong>Chemistry</strong><span>8 topics · 6 due</span></div><b>54%</b></div><div class="bar purple-bar"><span style="width:54%"></span></div></div><div class="subject-card"><div class="subject-top"><div class="subject-icon maths">∑</div><div><strong>Mathematics</strong><span>16 topics · All clear</span></div><b>81%</b></div><div class="bar orange-bar"><span style="width:81%"></span></div></div></div>
+            <div class="quote-card"><span class="quote-mark">“</span><p>It’s not about being perfect. It’s about showing up.</p><span class="quote-line"></span><small>YOUR SPARK FOR TODAY</small></div>
+          </aside>
+        </section>
+      </div>
+    </main>
+  </div>
+  <div class="toast" id="toast"></div>
+  <div class="modal-backdrop" id="modal"><div class="modal"><button class="modal-close" id="closeModal">×</button><div class="modal-spark">✦</div><p class="eyebrow">SPARK SESSION</p><h2>Ready to make it count?</h2><p>Your 18-minute Biology session has 12 questions across 3 topics. We’ll start with the concepts that need the most attention.</p><div class="modal-actions"><button class="secondary-button" id="later">Maybe later</button><button class="primary-button" id="begin">Begin session <span>→</span></button></div></div></div>
+  <div class="modal-backdrop" id="authModal"><div class="modal auth-modal"><button class="modal-close" id="closeAuth">×</button><div class="modal-spark">✦</div><p class="eyebrow">YOUR SPARK ACCOUNT</p><h2 id="authTitle">Welcome back.</h2><p id="authCopy">Sign in to save your sessions, streaks and progress across devices.</p><button type="button" class="auth-switch auth-switch-top" id="switchAuth">Create a new Spark Study account</button><form id="authForm"><label>Email<input id="authEmail" type="email" placeholder="you@example.com" required></label><label>Password<input id="authPassword" type="password" placeholder="At least 6 characters" minlength="6" required></label><button type="button" class="forgot-password" id="forgotPassword">Forgot password?</button><button class="primary-button auth-submit" type="submit" id="authSubmit">Sign in <span>→</span></button></form><div class="auth-divider"><span>or</span></div><button type="button" class="google-button" id="googleAuth">Continue with Google</button><p class="auth-status" id="authStatus"></p></div></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://js.paystack.co/v2/inline.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script src="https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js"></script><script src="supabase-config.js"></script><script src="pricing-config.js"></script><script src="app.js"></script>
+</body>
+</html>
