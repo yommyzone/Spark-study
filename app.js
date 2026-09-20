@@ -221,15 +221,32 @@ async function renderLibrary() {
   document.getElementById('uploadDrop').addEventListener('dragleave', e => e.currentTarget.classList.remove('dragging'));
   document.getElementById('uploadDrop').addEventListener('drop', e => { e.preventDefault(); e.currentTarget.classList.remove('dragging'); handleMaterialUpload(e.dataTransfer.files[0]); });
   input.addEventListener('change', () => input.files[0] && handleMaterialUpload(input.files[0]));
+  document.querySelectorAll('.material-action').forEach(button => button.addEventListener('click', () => generateMaterial(button.dataset.material, button.dataset.mode)));
 }
 
 function materialCard(material) {
   const size = material.size_bytes > 1048576 ? `${(material.size_bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(material.size_bytes / 1024))} KB`;
   const ext = material.file_name.split('.').pop().toUpperCase();
-  return `<div class="material-card"><div class="file-badge">${ext}</div><div class="material-info"><strong>${escapeHtml(material.title)}</strong><span>${size} · Uploaded ${new Date(material.created_at).toLocaleDateString()}</span></div><span class="material-status">Uploaded</span></div>`;
+  return `<div class="material-card"><div class="file-badge">${ext}</div><div class="material-info"><strong>${escapeHtml(material.title)}</strong><span>${size} · Uploaded ${new Date(material.created_at).toLocaleDateString()}</span></div><span class="material-status">${material.status === 'ready' ? 'Ready' : 'Uploaded'}</span><div class="material-actions"><button class="material-action" data-material="${material.id}" data-mode="summary">Summarise</button><button class="material-action" data-material="${material.id}" data-mode="explain">Explain</button></div></div>`;
 }
 
 function escapeHtml(value) { return String(value).replace(/[&<>\"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#039;' }[char])); }
+
+async function generateMaterial(materialId, mode) {
+  showToast(mode === 'summary' ? 'Creating your summary…' : 'Creating your explanation…');
+  const { data, error } = await sparkClient.functions.invoke('summarize-material', { body: { materialId } });
+  if (error || data?.error) { showToast(data?.error || error?.message || 'Could not process this material.'); return; }
+  const material = data;
+  showMaterialResult(mode === 'summary' ? 'Summary' : 'Simple explanation', mode === 'summary' ? material.summary : material.explanation, material.key_points || []);
+}
+
+function showMaterialResult(title, body, points) {
+  document.getElementById('materialResult')?.remove();
+  const pointsHtml = points.length ? `<div class="result-points"><strong>Key points</strong><ul>${points.map(point => `<li>${escapeHtml(point)}</li>`).join('')}</ul></div>` : '';
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop show" id="materialResult"><div class="modal material-result"><button class="modal-close" id="closeMaterialResult">×</button><div class="modal-spark">✦</div><p class="eyebrow">SPARK STUDY</p><h2>${title}</h2><p class="result-reading">${escapeHtml(body || 'No result was returned.')}</p>${pointsHtml}</div></div>`);
+  document.getElementById('closeMaterialResult').addEventListener('click', () => document.getElementById('materialResult').remove());
+  document.getElementById('materialResult').addEventListener('click', e => { if (e.target.id === 'materialResult') e.target.remove(); });
+}
 
 async function extractMaterialText(file) {
   const name = file.name.toLowerCase();
