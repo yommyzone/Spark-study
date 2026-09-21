@@ -213,7 +213,7 @@ async function renderLibrary() {
   const { data: sessionData } = sparkClient ? await sparkClient.auth.getSession() : { data: {} };
   if (!sessionData.session) { document.getElementById('openAuth').click(); return; }
   const { data: materials = [] } = await sparkClient.from('materials').select('*').order('created_at', { ascending: false });
-  document.getElementById('app').innerHTML = `<div class="library-view"><div class="library-heading"><div><p class="eyebrow">YOUR KNOWLEDGE BASE</p><h1>My library</h1><p>Bring your study material together. Spark will help you turn it into something you remember.</p></div><button class="primary-button" id="libraryUploadButton">Add material <span>+</span></button></div><div class="upload-drop" id="uploadDrop"><input type="file" id="materialInput" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" hidden><div class="upload-icon">↑</div><strong>Drop a file here, or <u>browse</u></strong><span>PDF, Word, text and Markdown files · Max 20 MB</span></div><div class="library-toolbar"><h2>Saved materials <small>${materials.length}</small></h2><span>Link reading is a Spark Premium feature</span></div><div class="materials-grid">${materials.length ? materials.map(materialCard).join('') : '<div class="empty-library"><div>✦</div><strong>Your library is waiting.</strong><span>Upload your first set of notes to get started.</span></div>'}</div></div>`;
+  document.getElementById('app').innerHTML = `<div class="library-view"><div class="library-heading"><div><p class="eyebrow">YOUR KNOWLEDGE BASE</p><h1>My library</h1><p>Bring your study material together. Spark will help you turn it into something you remember.</p></div><button class="primary-button" id="libraryUploadButton">Add material <span>+</span></button></div><div class="upload-drop" id="uploadDrop"><input type="file" id="materialInput" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" hidden><div class="upload-icon">↑</div><strong>Drop a file here, or <u>browse</u></strong><span>PDF, Word, text and Markdown files · Max 20 MB</span></div><div class="library-toolbar"><h2>Saved materials <small>${materials.length}</small></h2><span>Link reading is free · Premium unlocks more uploads</span></div><div class="materials-grid">${materials.length ? materials.map(materialCard).join('') : '<div class="empty-library"><div>✦</div><strong>Your library is waiting.</strong><span>Upload your first set of notes to get started.</span></div>'}</div></div>`;
   const input = document.getElementById('materialInput');
   document.getElementById('libraryUploadButton').addEventListener('click', () => input.click());
   document.getElementById('uploadDrop').addEventListener('click', e => { if (e.target.tagName !== 'INPUT') input.click(); });
@@ -233,19 +233,41 @@ function materialCard(material) {
 function escapeHtml(value) { return String(value).replace(/[&<>\"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#039;' }[char])); }
 
 async function generateMaterial(materialId, mode) {
-  showToast(mode === 'summary' ? 'Creating your summary…' : 'Creating your explanation…');
-  const { data, error } = await sparkClient.functions.invoke('summarize-material', { body: { materialId } });
-  if (error || data?.error) { showToast(data?.error || error?.message || 'Could not process this material.'); return; }
-  const material = data;
-  showMaterialResult(mode === 'summary' ? 'Summary' : 'Simple explanation', mode === 'summary' ? material.summary : material.explanation, material.key_points || []);
+  const buttons = [...document.querySelectorAll(`.material-action[data-material="${materialId}"]`)];
+  buttons.forEach(button => { button.disabled = true; button.textContent = 'Working…'; });
+  try {
+    const { data: cached, error: cachedError } = await sparkClient.from('materials').select('title,summary,explanation,key_points').eq('id', materialId).single();
+    if (!cachedError && cached && ((mode === 'summary' && cached.summary) || (mode === 'explain' && cached.explanation))) {
+      showMaterialResult(mode === 'summary' ? 'Summary' : 'Simple explanation', mode === 'summary' ? cached.summary : cached.explanation, cached.key_points || []);
+      return;
+    }
+    showToast(mode === 'summary' ? 'Creating your summary…' : 'Creating your explanation…');
+    const { data, error } = await sparkClient.functions.invoke('summarize-material', { body: { materialId } });
+    if (error || data?.error) { showToast(data?.error || error?.message || 'Could not process this material.'); return; }
+    showMaterialResult(mode === 'summary' ? 'Summary' : 'Simple explanation', mode === 'summary' ? data.summary : data.explanation, data.key_points || []);
+  } finally {
+    buttons.forEach(button => { button.disabled = false; button.textContent = button.dataset.mode === 'summary' ? 'Summarise' : 'Explain'; });
+  }
+}
+
+function speakMaterial(text, button) {
+  if (!('speechSynthesis' in window)) { showToast('Voice reading is not supported in this browser.'); return; }
+  if (window.speechSynthesis.speaking) { window.speechSynthesis.cancel(); button.textContent = 'Read aloud'; return; }
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 0.95; utterance.pitch = 1;
+  utterance.onend = () => { button.textContent = 'Read aloud'; };
+  window.speechSynthesis.speak(utterance); button.textContent = 'Stop reading';
 }
 
 function showMaterialResult(title, body, points) {
   document.getElementById('materialResult')?.remove();
+  const safeBody = body || 'No result was returned.';
   const pointsHtml = points.length ? `<div class="result-points"><strong>Key points</strong><ul>${points.map(point => `<li>${escapeHtml(point)}</li>`).join('')}</ul></div>` : '';
-  document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop show" id="materialResult"><div class="modal material-result"><button class="modal-close" id="closeMaterialResult">×</button><div class="modal-spark">✦</div><p class="eyebrow">SPARK STUDY</p><h2>${title}</h2><p class="result-reading">${escapeHtml(body || 'No result was returned.')}</p>${pointsHtml}</div></div>`);
-  document.getElementById('closeMaterialResult').addEventListener('click', () => document.getElementById('materialResult').remove());
-  document.getElementById('materialResult').addEventListener('click', e => { if (e.target.id === 'materialResult') e.target.remove(); });
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop show" id="materialResult"><div class="modal material-result"><button class="modal-close" id="closeMaterialResult">×</button><div class="modal-spark">✦</div><p class="eyebrow">SPARK STUDY</p><h2>${title}</h2><p class="result-reading">${escapeHtml(safeBody)}</p><button class="read-aloud" id="readAloud">▸ Read aloud</button>${pointsHtml}</div></div>`);
+  const result = document.getElementById('materialResult');
+  document.getElementById('readAloud').addEventListener('click', event => speakMaterial(safeBody, event.currentTarget));
+  document.getElementById('closeMaterialResult').addEventListener('click', () => { window.speechSynthesis?.cancel(); result.remove(); });
+  result.addEventListener('click', e => { if (e.target.id === 'materialResult') { window.speechSynthesis?.cancel(); result.remove(); } });
 }
 
 async function extractMaterialText(file) {
