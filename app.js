@@ -221,13 +221,15 @@ async function renderLibrary() {
   document.getElementById('uploadDrop').addEventListener('dragleave', e => e.currentTarget.classList.remove('dragging'));
   document.getElementById('uploadDrop').addEventListener('drop', e => { e.preventDefault(); e.currentTarget.classList.remove('dragging'); handleMaterialUpload(e.dataTransfer.files[0]); });
   input.addEventListener('change', () => input.files[0] && handleMaterialUpload(input.files[0]));
-  document.querySelectorAll('.material-action').forEach(button => button.addEventListener('click', () => generateMaterial(button.dataset.material, button.dataset.mode)));
+  document.querySelectorAll('.material-action[data-mode]').forEach(button => button.addEventListener('click', () => generateMaterial(button.dataset.material, button.dataset.mode)));
+  document.querySelectorAll('.download-summary').forEach(button => button.addEventListener('click', () => downloadSummary(button.dataset.material, button.dataset.title)));
 }
 
 function materialCard(material) {
   const size = material.size_bytes > 1048576 ? `${(material.size_bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(material.size_bytes / 1024))} KB`;
   const ext = material.file_name.split('.').pop().toUpperCase();
-  return `<div class="material-card"><div class="file-badge">${ext}</div><div class="material-info"><strong>${escapeHtml(material.title)}</strong><span>${size} · Uploaded ${new Date(material.created_at).toLocaleDateString()}</span></div><span class="material-status">${material.status === 'ready' ? 'Ready' : 'Uploaded'}</span><div class="material-actions"><button class="material-action" data-material="${material.id}" data-mode="summary">Summarise</button><button class="material-action" data-material="${material.id}" data-mode="explain">Explain</button></div></div>`;
+  const summaryPreview = material.summary ? `<div class="material-summary-preview"><strong>Saved summary</strong><p>${escapeHtml(material.summary.slice(0, 360))}${material.summary.length > 360 ? '…' : ''}</p><button class="material-action download-summary" data-material="${material.id}" data-title="${escapeHtml(material.title)}">Download summary</button></div>` : '';
+  return `<div class="material-card"><div class="material-card-top"><div class="file-badge">${ext}</div><div class="material-info"><strong>${escapeHtml(material.title)}</strong><span>${size} · Uploaded ${new Date(material.created_at).toLocaleDateString()}</span></div><span class="material-status">${material.status === 'ready' ? 'Ready' : 'Uploaded'}</span><div class="material-actions"><button class="material-action" data-material="${material.id}" data-mode="summary">Summarise</button><button class="material-action" data-material="${material.id}" data-mode="explain">Explain</button></div></div>${summaryPreview}</div>`;
 }
 
 function escapeHtml(value) { return String(value).replace(/[&<>\"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#039;' }[char])); }
@@ -248,6 +250,16 @@ async function generateMaterial(materialId, mode) {
   } finally {
     buttons.forEach(button => { button.disabled = false; button.textContent = button.dataset.mode === 'summary' ? 'Summarise' : 'Explain'; });
   }
+}
+
+async function downloadSummary(materialId, title) {
+  const { data: material, error } = await sparkClient.from('materials').select('summary,explanation,key_points').eq('id', materialId).single();
+  if (error || !material?.summary) { showToast('Generate a summary before downloading it.'); return; }
+  const content = `${title}\n\nSUMMARY\n${material.summary}\n\nKEY POINTS\n${(material.key_points || []).map((point, index) => `${index + 1}. ${point}`).join('\\n')}\n\nEXPLANATION\n${material.explanation || ''}`;
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob); const link = document.createElement('a');
+  link.href = url; link.download = `${title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-summary.txt`; link.click();
+  URL.revokeObjectURL(url); showToast('Summary downloaded.');
 }
 
 function speakMaterial(text, button) {
