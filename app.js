@@ -130,7 +130,8 @@ function showToast(message) {
 document.getElementById('startSession').addEventListener('click', () => modal.classList.add('show'));
 document.getElementById('closeModal').addEventListener('click', () => modal.classList.remove('show'));
 document.getElementById('later').addEventListener('click', () => modal.classList.remove('show'));
-const quizQuestions = [
+let activeQuizTitle = 'Biology: Cell structure';
+let quizQuestions = [
   { topic: 'Cell structure', question: 'Which organelle is known as the powerhouse of the cell?', options: ['Nucleus', 'Mitochondrion', 'Ribosome', 'Cell wall'], answer: 1, explanation: 'Mitochondria produce most of the cell’s ATP, the usable energy that powers cellular work.' },
   { topic: 'Cell structure', question: 'What is the main function of the cell membrane?', options: ['Produce proteins', 'Store genetic material', 'Control what enters and leaves the cell', 'Release energy from glucose'], answer: 2, explanation: 'The selectively permeable cell membrane regulates movement of substances into and out of the cell.' },
   { topic: 'Cell division', question: 'During which stage of mitosis do chromosomes line up at the cell’s equator?', options: ['Prophase', 'Metaphase', 'Anaphase', 'Telophase'], answer: 1, explanation: 'In metaphase, chromosomes align across the middle of the cell before being separated.' },
@@ -148,7 +149,7 @@ function renderQuiz() {
   const q = quizQuestions[quizState.index];
   const pct = Math.round((quizState.index / quizQuestions.length) * 100);
   document.getElementById('app').innerHTML = `<div class="quiz-view">
-    <div class="quiz-header"><button class="back-button" id="backToOverview">← Back to overview</button><div class="quiz-title"><span class="session-tag"><span class="live-dot"></span> BIOLOGY SESSION</span><strong>Cell structure</strong></div><span class="quiz-count">${quizState.index + 1} <small>/ ${quizQuestions.length}</small></span></div>
+    <div class="quiz-header"><button class="back-button" id="backToOverview">← Back to overview</button><div class="quiz-title"><span class="session-tag"><span class="live-dot"></span> BIOLOGY SESSION</span><strong>${escapeHtml(activeQuizTitle)}</strong></div><span class="quiz-count">${quizState.index + 1} <small>/ ${quizQuestions.length}</small></span></div>
     <div class="quiz-progress"><span style="width:${pct}%"></span></div>
     <div class="quiz-card"><div class="question-topic">${q.topic}</div><h1>${q.question}</h1><div class="options">${q.options.map((option, i) => `<button class="option ${quizState.answered && i === q.answer ? 'correct' : ''}" data-option="${i}" ${quizState.answered ? 'disabled' : ''}><span>${String.fromCharCode(65 + i)}</span>${option}</button>`).join('')}</div><div class="answer-feedback" id="feedback"></div></div>
     <div class="quiz-footer"><span>Take your time. Recall is how memory gets stronger.</span><button class="primary-button next-button" id="nextQuestion" disabled>Next question <span>→</span></button></div>
@@ -213,7 +214,7 @@ async function renderLibrary() {
   const { data: sessionData } = sparkClient ? await sparkClient.auth.getSession() : { data: {} };
   if (!sessionData.session) { document.getElementById('openAuth').click(); return; }
   const { data: materials = [] } = await sparkClient.from('materials').select('*').order('created_at', { ascending: false });
-  document.getElementById('app').innerHTML = `<div class="library-view"><div class="library-heading"><div><p class="eyebrow">YOUR KNOWLEDGE BASE</p><h1>My library</h1><p>Bring your study material together. Spark will help you turn it into something you remember.</p></div><button class="primary-button" id="libraryUploadButton">Add material <span>+</span></button></div><div class="upload-drop" id="uploadDrop"><input type="file" id="materialInput" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" hidden><div class="upload-icon">↑</div><strong>Drop a file here, or <u>browse</u></strong><span>PDF, Word, text and Markdown files · Max 20 MB</span></div><div class="library-toolbar"><h2>Saved materials <small>${materials.length}</small></h2><span>Link reading is free · Premium unlocks more uploads</span></div><div class="materials-grid">${materials.length ? materials.map(materialCard).join('') : '<div class="empty-library"><div>✦</div><strong>Your library is waiting.</strong><span>Upload your first set of notes to get started.</span></div>'}</div></div>`;
+  document.getElementById('app').innerHTML = `<div class="library-view"><div class="library-heading"><div><p class="eyebrow">YOUR KNOWLEDGE BASE</p><h1>My library</h1><p>Bring your study material together. Spark will help you turn it into something you remember.</p></div><button class="primary-button" id="libraryUploadButton">Add material <span>+</span></button></div><div class="upload-drop" id="uploadDrop"><input type="file" id="materialInput" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" hidden><div class="upload-icon">↑</div><strong>Drop a file here, or <u>browse</u></strong><span>PDF, Word, text and Markdown files · Max 20 MB</span></div><div class="link-import"><div><strong>Read a web link</strong><span>Free for everyone · Premium unlocks more uploads</span></div><div class="link-form"><input id="linkInput" type="url" placeholder="https://example.com/article"/><button class="primary-button" id="readLink">Read link <span>→</span></button></div></div><div class="library-toolbar"><h2>Saved materials <small>${materials.length}</small></h2><span>Link reading is free · Premium unlocks more uploads</span></div><div class="materials-grid">${materials.length ? materials.map(materialCard).join('') : '<div class="empty-library"><div>✦</div><strong>Your library is waiting.</strong><span>Upload your first set of notes to get started.</span></div>'}</div></div>`;
   const input = document.getElementById('materialInput');
   document.getElementById('libraryUploadButton').addEventListener('click', () => input.click());
   document.getElementById('uploadDrop').addEventListener('click', e => { if (e.target.tagName !== 'INPUT') input.click(); });
@@ -221,15 +222,17 @@ async function renderLibrary() {
   document.getElementById('uploadDrop').addEventListener('dragleave', e => e.currentTarget.classList.remove('dragging'));
   document.getElementById('uploadDrop').addEventListener('drop', e => { e.preventDefault(); e.currentTarget.classList.remove('dragging'); handleMaterialUpload(e.dataTransfer.files[0]); });
   input.addEventListener('change', () => input.files[0] && handleMaterialUpload(input.files[0]));
+  document.getElementById('readLink').addEventListener('click', readLinkMaterial);
   document.querySelectorAll('.material-action[data-mode]').forEach(button => button.addEventListener('click', () => generateMaterial(button.dataset.material, button.dataset.mode)));
   document.querySelectorAll('.download-summary').forEach(button => button.addEventListener('click', () => downloadSummary(button.dataset.material, button.dataset.title)));
+  document.querySelectorAll('.study-material-button').forEach(button => button.addEventListener('click', () => startMaterialQuiz(button.dataset.material)));
 }
 
 function materialCard(material) {
   const size = material.size_bytes > 1048576 ? `${(material.size_bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(material.size_bytes / 1024))} KB`;
   const ext = material.file_name.split('.').pop().toUpperCase();
   const summaryPreview = material.summary ? `<div class="material-summary-preview"><strong>Saved summary</strong><p>${escapeHtml(material.summary.slice(0, 360))}${material.summary.length > 360 ? '…' : ''}</p><button class="material-action download-summary" data-material="${material.id}" data-title="${escapeHtml(material.title)}">Download summary</button></div>` : '';
-  return `<div class="material-card"><div class="material-card-top"><div class="file-badge">${ext}</div><div class="material-info"><strong>${escapeHtml(material.title)}</strong><span>${size} · Uploaded ${new Date(material.created_at).toLocaleDateString()}</span></div><span class="material-status">${material.status === 'ready' ? 'Ready' : 'Uploaded'}</span><div class="material-actions"><button class="material-action" data-material="${material.id}" data-mode="summary">Summarise</button><button class="material-action" data-material="${material.id}" data-mode="explain">Explain</button></div></div>${summaryPreview}</div>`;
+  return `<div class="material-card"><div class="material-card-top"><div class="file-badge">${ext}</div><div class="material-info"><strong>${escapeHtml(material.title)}</strong><span>${size} · Uploaded ${new Date(material.created_at).toLocaleDateString()}</span></div><span class="material-status">${material.status === 'ready' ? 'Ready' : 'Uploaded'}</span><div class="material-actions"><button class="material-action" data-material="${material.id}" data-mode="summary">Summarise</button><button class="material-action" data-material="${material.id}" data-mode="explain">Explain</button><button class="material-action study-material-button" data-material="${material.id}">Study</button></div></div>${summaryPreview}</div>`;
 }
 
 function escapeHtml(value) { return String(value).replace(/[&<>\"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#039;' }[char])); }
@@ -250,6 +253,34 @@ async function generateMaterial(materialId, mode) {
   } finally {
     buttons.forEach(button => { button.disabled = false; button.textContent = button.dataset.mode === 'summary' ? 'Summarise' : 'Explain'; });
   }
+}
+
+async function readLinkMaterial() {
+  const input = document.getElementById('linkInput');
+  const url = input.value.trim();
+  if (!url || !/^https?:\/\//i.test(url)) { showToast('Enter a valid http or https link.'); return; }
+  const button = document.getElementById('readLink'); button.disabled = true; button.textContent = 'Reading…';
+  const { data, error } = await sparkClient.functions.invoke('read-link', { body: { url } });
+  button.disabled = false; button.innerHTML = 'Read link <span>→</span>';
+  if (error || data?.error) { showToast(data?.error || error?.message || 'Could not read that link.'); return; }
+  showToast('Link added to your library ✦'); renderLibrary();
+}
+
+async function startMaterialQuiz(materialId) {
+  showToast('Loading your material quiz…');
+  let { data: material, error } = await sparkClient.from('materials').select('title,generated_quiz').eq('id', materialId).single();
+  if (error || !material) { showToast('Could not load this material.'); return; }
+  let questions = material.generated_quiz || [];
+  if (!questions.length) {
+    const result = await sparkClient.functions.invoke('summarize-material', { body: { materialId } });
+    if (result.error || result.data?.error) { showToast(result.data?.error || result.error?.message || 'Generate the material content first.'); return; }
+    questions = result.data.quiz || [];
+  }
+  if (!questions.length) { showToast('No quiz questions were generated for this material.'); return; }
+  activeQuizTitle = material.title;
+  quizQuestions = questions.map(item => ({ topic: material.title, question: item.question, options: item.options || [], answer: Number(item.answer), explanation: item.explanation || 'Review the material and try this question again.' }));
+  quizState = { index: 0, score: 0, answered: false };
+  renderQuiz();
 }
 
 async function downloadSummary(materialId, title) {
