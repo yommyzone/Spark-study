@@ -6,6 +6,24 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
+function fallbackQuiz(text: string) {
+  const sentences = text.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 45)
+  const stopWords = new Set(['about', 'there', 'their', 'which', 'these', 'those', 'would', 'could', 'should', 'because', 'through', 'where', 'while', 'between', 'important', 'following'])
+  const terms = [...new Set((text.match(/[A-Za-z][A-Za-z'-]{4,}/g) || []).map(word => word.toLowerCase()).filter(word => !stopWords.has(word)))]
+  const questions = []
+  for (let i = 0; i < 16; i++) {
+    const sentence = sentences[i % Math.max(sentences.length, 1)] || text.slice(0, 180)
+    const wordsInSentence = [...new Set((sentence.match(/[A-Za-z][A-Za-z'-]{4,}/g) || []).map(word => word.toLowerCase()).filter(word => !stopWords.has(word)))]
+    const answer = wordsInSentence[0] || terms[i % Math.max(terms.length, 1)] || 'concept'
+    const blanked = sentence.replace(new RegExp(`\\b${answer}\\b`, 'i'), '_____')
+    const distractors = terms.filter(term => term !== answer).slice(i % 5, i % 5 + 3)
+    while (distractors.length < 3) distractors.push(['process', 'system', 'example', 'method', 'result'][distractors.length])
+    const options = [answer, ...distractors.slice(0, 3)]
+    questions.push({ question: `Which important term completes this statement from the material? ${blanked}`, options, answer: 0, explanation: `The material states this in relation to ${answer}.` })
+  }
+  return questions
+}
+
 function fallbackResult(title: string, text: string) {
   const sentences = text.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).filter(Boolean)
   const summary = sentences.slice(0, 18).join(' ').slice(0, 3000)
@@ -15,7 +33,7 @@ function fallbackResult(title: string, text: string) {
     explanation: `In simple terms, this material is about ${sentences.slice(0, 3).join(' ').slice(0, 900)}`,
     key_points: keyPoints,
     flashcards: [],
-    quiz: [],
+    quiz: fallbackQuiz(text),
     source: 'local-fallback',
   }
 }
@@ -44,7 +62,7 @@ Deno.serve(async (req) => {
     const geminiKey = Deno.env.get('GEMINI_API_KEY')
     try {
       if (!geminiKey) throw new Error('GEMINI_API_KEY is not configured.')
-      const prompt = `You are Spark Study, a clear and encouraging study coach. Read the material carefully and return ONLY valid JSON with these keys. Make the summary comprehensive for revision: explain the central idea, important context, major concepts, relationships, examples and exam-relevant takeaways. Use plain text paragraphs with short section labels: summary (350 to 500 words), explanation (a simple student-friendly explanation), key_points (8 short points), flashcards (8 objects with question and answer), quiz (8 objects with question, options as an array of 4 strings, and answer as the zero-based correct option index). Do not use markdown fences. Material title: ${material.title}\n\nMaterial:\n${material.extracted_text.slice(0, 50000)}`
+      const prompt = `You are Spark Study, a clear and encouraging study coach. Read the material carefully and return ONLY valid JSON with these keys. Make the summary comprehensive for revision: explain the central idea, important context, major concepts, relationships, examples and exam-relevant takeaways. Use plain text paragraphs with short section labels: summary (350 to 500 words), explanation (a simple student-friendly explanation), key_points (8 short points), flashcards (8 objects with question and answer), quiz (at least 16 objects with question, options as an array of 4 strings, and answer as the zero-based correct option index). Do not use markdown fences. Material title: ${material.title}\n\nMaterial:\n${material.extracted_text.slice(0, 50000)}`
       const models = ['gemini-3.6-flash-lite', 'gemini-3.6-flash']
       let response: Response | null = null
       let lastFailure = ''
@@ -63,6 +81,7 @@ Deno.serve(async (req) => {
       const raw = json.candidates?.[0]?.content?.parts?.[0]?.text
       if (!raw) throw new Error('Gemini returned an empty response.')
       result = JSON.parse(raw.replace(/^```json\s*/, '').replace(/\s*```$/, ''))
+      if (!Array.isArray(result.quiz) || result.quiz.length < 16) result.quiz = fallbackQuiz(material.extracted_text)
       result.source = 'gemini'
     } catch (aiError) {
       console.warn('Gemini unavailable; using local fallback:', aiError instanceof Error ? aiError.message : aiError)

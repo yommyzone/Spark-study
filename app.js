@@ -210,11 +210,21 @@ function renderResults() {
   document.getElementById('tryAgain').addEventListener('click', () => { quizState = { index: 0, score: 0, answered: false }; renderQuiz(); });
 }
 
+async function getPlan() {
+  const { data: userData } = await sparkClient.auth.getUser();
+  if (!userData.user) return { plan: 'free', premium: false };
+  const { data: profile } = await sparkClient.from('profiles').select('plan,subscription_status,subscription_expires_at').eq('id', userData.user.id).single();
+  const premium = profile?.plan === 'premium' && profile.subscription_status === 'active' && (!profile.subscription_expires_at || new Date(profile.subscription_expires_at) > new Date());
+  return { plan: premium ? 'premium' : 'free', premium };
+}
+
 async function renderLibrary() {
   const { data: sessionData } = sparkClient ? await sparkClient.auth.getSession() : { data: {} };
   if (!sessionData.session) { document.getElementById('openAuth').click(); return; }
   const { data: materials = [] } = await sparkClient.from('materials').select('*').order('created_at', { ascending: false });
-  document.getElementById('app').innerHTML = `<div class="library-view"><div class="library-heading"><div><p class="eyebrow">YOUR KNOWLEDGE BASE</p><h1>My library</h1><p>Bring your study material together. Spark will help you turn it into something you remember.</p></div><button class="primary-button" id="libraryUploadButton">Add material <span>+</span></button></div><div class="upload-drop" id="uploadDrop"><input type="file" id="materialInput" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" hidden><div class="upload-icon">↑</div><strong>Drop a file here, or <u>browse</u></strong><span>PDF, Word, text and Markdown files · Max 20 MB</span></div><div class="link-import"><div><strong>Read a web link</strong><span>Free for everyone · Premium unlocks more uploads</span></div><div class="link-form"><input id="linkInput" type="url" placeholder="https://example.com/article"/><button class="primary-button" id="readLink">Read link <span>→</span></button></div></div><div class="library-toolbar"><h2>Saved materials <small>${materials.length}</small></h2><span>Link reading is free · Premium unlocks more uploads</span></div><div class="materials-grid">${materials.length ? materials.map(materialCard).join('') : '<div class="empty-library"><div>✦</div><strong>Your library is waiting.</strong><span>Upload your first set of notes to get started.</span></div>'}</div></div>`;
+  const accountPlan = await getPlan();
+  const materialLimit = accountPlan.premium ? 100 : 10;
+  document.getElementById('app').innerHTML = `<div class="library-view"><div class="library-heading"><div><p class="eyebrow">YOUR KNOWLEDGE BASE</p><h1>My library</h1><p>Bring your study material together. Spark will help you turn it into something you remember.</p></div><button class="primary-button" id="libraryUploadButton">Add material <span>+</span></button></div><div class="upload-drop" id="uploadDrop"><input type="file" id="materialInput" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" hidden><div class="upload-icon">↑</div><strong>Drop a file here, or <u>browse</u></strong><span>PDF, Word, text and Markdown files · Max 20 MB</span></div><div class="link-import"><div><strong>Read a web link</strong><span>Free for everyone · Premium unlocks more uploads</span></div><div class="link-form"><input id="linkInput" type="url" placeholder="https://example.com/article"/><button class="primary-button" id="readLink">Read link <span>→</span></button></div></div><div class="library-toolbar"><h2>Saved materials <small>${materials.length}/${materialLimit}</small></h2><span>${accountPlan.premium ? 'Premium plan · higher limits' : 'Free plan · 10 materials maximum'}</span></div><div class="materials-grid">${materials.length ? materials.map(materialCard).join('') : '<div class="empty-library"><div>✦</div><strong>Your library is waiting.</strong><span>Upload your first set of notes to get started.</span></div>'}</div></div>`;
   const input = document.getElementById('materialInput');
   document.getElementById('libraryUploadButton').addEventListener('click', () => input.click());
   document.getElementById('uploadDrop').addEventListener('click', e => { if (e.target.tagName !== 'INPUT') input.click(); });
@@ -341,6 +351,9 @@ async function handleMaterialUpload(file) {
   if (file.size > 20 * 1024 * 1024) { showToast('That file is larger than 20 MB.'); return; }
   const { data: userData } = await sparkClient.auth.getUser();
   if (!userData.user) { showToast('Please sign in before uploading.'); return; }
+  const { data: currentMaterials = [] } = await sparkClient.from('materials').select('id').eq('user_id', userData.user.id);
+  const accountPlan = await getPlan();
+  if (!accountPlan.premium && currentMaterials.length >= 10) { showToast('Free plan limit reached: 10 active materials. Upgrade to Premium for more.'); return; }
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
   const path = `${userData.user.id}/${crypto.randomUUID()}-${safeName}`;
   showToast('Reading and uploading your material…');
