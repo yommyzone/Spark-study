@@ -250,13 +250,14 @@ async function renderLibrary() {
   document.querySelectorAll('.material-action[data-mode]').forEach(button => button.addEventListener('click', () => generateMaterial(button.dataset.material, button.dataset.mode)));
   document.querySelectorAll('.download-summary').forEach(button => button.addEventListener('click', () => downloadSummary(button.dataset.material, button.dataset.title)));
   document.querySelectorAll('.study-material-button').forEach(button => button.addEventListener('click', () => startMaterialQuiz(button.dataset.material)));
+  document.querySelectorAll('.delete-material').forEach(button => button.addEventListener('click', () => deleteMaterial(button.dataset.material, button.dataset.path)));
 }
 
 function materialCard(material) {
   const size = material.size_bytes > 1048576 ? `${(material.size_bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(material.size_bytes / 1024))} KB`;
   const ext = material.file_name.split('.').pop().toUpperCase();
   const summaryPreview = material.summary ? `<div class="material-summary-preview"><strong>Saved summary</strong><p>${escapeHtml(material.summary.slice(0, 360))}${material.summary.length > 360 ? '…' : ''}</p><button class="material-action download-summary" data-material="${material.id}" data-title="${escapeHtml(material.title)}">Download summary</button></div>` : '';
-  return `<div class="material-card"><div class="material-card-top"><div class="file-badge">${ext}</div><div class="material-info"><strong>${escapeHtml(material.title)}</strong><span>${size} · Uploaded ${new Date(material.created_at).toLocaleDateString()}</span></div><span class="material-status">${material.status === 'ready' ? 'Ready' : 'Uploaded'}</span><div class="material-actions"><button class="material-action" data-material="${material.id}" data-mode="summary">Summarise</button><button class="material-action" data-material="${material.id}" data-mode="explain">Explain</button><button class="material-action study-material-button" data-material="${material.id}">Study</button></div></div>${summaryPreview}</div>`;
+  return `<div class="material-card"><div class="material-card-top"><div class="file-badge">${ext}</div><div class="material-info"><strong>${escapeHtml(material.title)}</strong><span>${size} · Uploaded ${new Date(material.created_at).toLocaleDateString()}</span></div><span class="material-status">${material.status === 'ready' ? 'Ready' : 'Uploaded'}</span><div class="material-actions"><button class="material-action" data-material="${material.id}" data-mode="summary">Summarise</button><button class="material-action" data-material="${material.id}" data-mode="explain">Explain</button><button class="material-action study-material-button" data-material="${material.id}">Study</button><button class="material-action delete-material" data-material="${material.id}" data-path="${escapeHtml(material.storage_path)}">Delete</button></div></div>${summaryPreview}</div>`;
 }
 
 function escapeHtml(value) { return String(value).replace(/[&<>\"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#039;' }[char])); }
@@ -290,6 +291,16 @@ async function readLinkMaterial() {
   showToast('Link added to your library ✦'); renderLibrary();
 }
 
+async function deleteMaterial(materialId, storagePath) {
+  if (!window.confirm('Delete this material? Its file, summary and quiz will be removed.')) return;
+  showToast('Deleting material…');
+  if (storagePath && !storagePath.startsWith('link:')) await sparkClient.storage.from('study-materials').remove([storagePath]);
+  const { error } = await sparkClient.from('materials').delete().eq('id', materialId);
+  if (error) { showToast(`Could not delete material: ${error.message}`); return; }
+  showToast('Material deleted.');
+  renderLibrary();
+}
+
 async function startMaterialQuiz(materialId) {
   showToast('Loading your material quiz…');
   let { data: material, error } = await sparkClient.from('materials').select('title,generated_quiz').eq('id', materialId).single();
@@ -303,6 +314,13 @@ async function startMaterialQuiz(materialId) {
   if (!questions.length) { showToast('No quiz questions were generated for this material.'); return; }
   activeQuizTitle = material.title;
   activeMaterialId = materialId;
+  questions = questions.map((item, index) => {
+    const options = item.options || [];
+    const correct = options[Number(item.answer) || 0];
+    const shift = options.length ? index % options.length : 0;
+    const rotated = options.slice(shift).concat(options.slice(0, shift));
+    return { ...item, options: rotated, answer: Math.max(0, rotated.indexOf(correct)) };
+  });
   quizQuestions = questions.map(item => ({ topic: material.title, question: item.question, options: item.options || [], answer: Number(item.answer), explanation: item.explanation || 'Review the material and try this question again.' }));
   quizState = { index: 0, score: 0, answered: false };
   renderQuiz();
@@ -410,12 +428,12 @@ async function renderProgress() {
   if (!sparkClient) return;
   const { data: userData } = await sparkClient.auth.getUser();
   if (!userData.user) { document.getElementById('openAuth').click(); return; }
-  const { data: sessions = [] } = await sparkClient.from('study_sessions').select('*').order('completed_at', { ascending: false }).limit(50);
+  const { data: sessions = [] } = await sparkClient.from('study_sessions').select('*, materials(title)').order('completed_at', { ascending: false }).limit(50);
   const answered = sessions.reduce((sum, item) => sum + (item.total_questions || 0), 0);
   const correct = sessions.reduce((sum, item) => sum + (item.score || 0), 0);
   const accuracy = answered ? Math.round(correct / answered * 100) : 0;
   const bars = sessions.slice(0, 8).reverse().map(item => `<div class="progress-bar-col"><span style="height:${item.total_questions ? Math.max(8, item.score / item.total_questions * 100) : 8}%"></span><small>${Math.round(item.total_questions ? item.score / item.total_questions * 100 : 0)}%</small></div>`).join('');
-  document.getElementById('app').innerHTML = `<div class="progress-view"><div class="library-heading"><div><p class="eyebrow">YOUR LEARNING SIGNALS</p><h1>Progress</h1><p>See what you’re retaining and where your next Spark should go.</p></div><button class="back-button" id="progressBack">← Overview</button></div><div class="progress-metrics"><div><span>Sessions</span><strong>${sessions.length}</strong></div><div><span>Questions</span><strong>${answered}</strong></div><div><span>Correct</span><strong>${correct}</strong></div><div><span>Accuracy</span><strong>${accuracy}%</strong></div></div><div class="progress-panel"><div class="section-heading"><div><p class="eyebrow">SESSION ACCURACY</p><h2>Recent performance</h2></div><span class="progress-caption">${sessions.length ? 'Latest sessions' : 'Complete a session to begin'}</span></div><div class="progress-chart">${bars || '<div class="progress-empty">Your completed sessions will appear here.</div>'}</div></div><div class="progress-panel"><p class="eyebrow">SESSION HISTORY</p><div class="history-list">${sessions.slice(0, 8).map(item => `<div class="history-row"><strong>Biology session</strong><span>${new Date(item.completed_at).toLocaleDateString()}</span><b>${item.score}/${item.total_questions}</b></div>`).join('') || '<div class="progress-empty">No saved sessions yet.</div>'}</div></div></div>`;
+  document.getElementById('app').innerHTML = `<div class="progress-view"><div class="library-heading"><div><p class="eyebrow">YOUR LEARNING SIGNALS</p><h1>Progress</h1><p>See what you’re retaining and where your next Spark should go.</p></div><button class="back-button" id="progressBack">← Overview</button></div><div class="progress-metrics"><div><span>Sessions</span><strong>${sessions.length}</strong></div><div><span>Questions</span><strong>${answered}</strong></div><div><span>Correct</span><strong>${correct}</strong></div><div><span>Accuracy</span><strong>${accuracy}%</strong></div></div><div class="progress-panel"><div class="section-heading"><div><p class="eyebrow">SESSION ACCURACY</p><h2>Recent performance</h2></div><span class="progress-caption">${sessions.length ? 'Latest sessions' : 'Complete a session to begin'}</span></div><div class="progress-chart">${bars || '<div class="progress-empty">Your completed sessions will appear here.</div>'}</div></div><div class="progress-panel"><p class="eyebrow">SESSION HISTORY</p><div class="history-list">${sessions.slice(0, 8).map(item => `<div class="history-row"><strong>${escapeHtml(item.materials?.title || 'Spark session')}</strong><span>${new Date(item.completed_at).toLocaleDateString()}</span><b>${item.score}/${item.total_questions}</b></div>`).join('') || '<div class="progress-empty">No saved sessions yet.</div>'}</div></div></div>`;
   document.getElementById('progressBack').addEventListener('click', renderOverview);
 }
 

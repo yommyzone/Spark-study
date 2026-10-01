@@ -6,6 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
+function balanceQuizOptions(quiz: any[]) {
+  return quiz.map((item, index) => {
+    const options = Array.isArray(item.options) ? [...item.options] : []
+    if (options.length < 2) return item
+    const correct = options[Number(item.answer) || 0]
+    const shift = index % options.length
+    const rotated = options.slice(shift).concat(options.slice(0, shift))
+    return { ...item, options: rotated, answer: Math.max(0, rotated.indexOf(correct)) }
+  })
+}
+
 function fallbackQuiz(text: string) {
   const sentences = text.replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 45)
   const stopWords = new Set(['about', 'there', 'their', 'which', 'these', 'those', 'would', 'could', 'should', 'because', 'through', 'where', 'while', 'between', 'important', 'following'])
@@ -19,7 +30,9 @@ function fallbackQuiz(text: string) {
     const distractors = terms.filter(term => term !== answer).slice(i % 5, i % 5 + 3)
     while (distractors.length < 3) distractors.push(['process', 'system', 'example', 'method', 'result'][distractors.length])
     const options = [answer, ...distractors.slice(0, 3)]
-    questions.push({ question: `Which important term completes this statement from the material? ${blanked}`, options, answer: 0, explanation: `The material states this in relation to ${answer}.` })
+    const shift = i % options.length
+    const rotated = options.slice(shift).concat(options.slice(0, shift))
+    questions.push({ question: `Which important term completes this statement from the material? ${blanked}`, options: rotated, answer: rotated.indexOf(answer), explanation: `The material states this in relation to ${answer}.` })
   }
   return questions
 }
@@ -82,6 +95,7 @@ Deno.serve(async (req) => {
       if (!raw) throw new Error('Gemini returned an empty response.')
       result = JSON.parse(raw.replace(/^```json\s*/, '').replace(/\s*```$/, ''))
       if (!Array.isArray(result.quiz) || result.quiz.length < 16) result.quiz = fallbackQuiz(material.extracted_text)
+      else result.quiz = balanceQuizOptions(result.quiz)
       result.source = 'gemini'
     } catch (aiError) {
       console.warn('Gemini unavailable; using local fallback:', aiError instanceof Error ? aiError.message : aiError)
