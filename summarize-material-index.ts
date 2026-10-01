@@ -70,6 +70,12 @@ Deno.serve(async (req) => {
     const { data: material, error: materialError } = await supabase.from('materials').select('id, title, extracted_text').eq('id', materialId).single()
     if (materialError || !material) throw new Error('Material not found.')
     if (!material.extracted_text?.trim()) throw new Error('This material has no extracted text yet.')
+    const { data: profile } = await supabase.from('profiles').select('plan,subscription_status,subscription_expires_at').eq('id', userData.user.id).single()
+    const premium = profile?.plan === 'premium' && profile.subscription_status === 'active' && (!profile.subscription_expires_at || new Date(profile.subscription_expires_at) > new Date())
+    const monthStart = new Date(); monthStart.setUTCDate(1); const usageMonth = monthStart.toISOString().slice(0, 10)
+    const { data: usage } = await supabase.from('usage_monthly').select('ai_generations_used').eq('user_id', userData.user.id).eq('usage_month', usageMonth).maybeSingle()
+    const aiLimit = premium ? 100 : 5
+    if ((usage?.ai_generations_used || 0) >= aiLimit) throw new Error(`${premium ? 'Premium' : 'Free'} AI generation limit reached: ${aiLimit} this month.`)
 
     let result
     const geminiKey = Deno.env.get('GEMINI_API_KEY')
@@ -104,6 +110,7 @@ Deno.serve(async (req) => {
 
     const { error: updateError } = await supabase.from('materials').update({ summary: result.summary || '', explanation: result.explanation || '', key_points: result.key_points || [], generated_quiz: result.quiz || [], status: 'ready', generated_at: new Date().toISOString() }).eq('id', material.id)
     if (updateError) throw updateError
+    await supabase.from('usage_monthly').upsert({ user_id: userData.user.id, usage_month: usageMonth, ai_generations_used: (usage?.ai_generations_used || 0) + 1 }, { onConflict: 'user_id,usage_month' })
     return new Response(JSON.stringify({ ...result, materialId: material.id }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Summary failed.'

@@ -25,8 +25,9 @@ Deno.serve(async (req) => {
     const { count: materialCount } = await supabase.from('materials').select('id', { count: 'exact', head: true }).eq('user_id', userData.user.id)
     if (!premium && (materialCount || 0) >= 10) throw new Error('Free plan limit reached: 10 active materials. Upgrade to Premium for more.')
     const month = new Date(); month.setUTCDate(1); const usageMonth = month.toISOString().slice(0, 10)
-    const { data: usage } = await supabase.from('link_usage').select('links_used').eq('user_id', userData.user.id).eq('usage_month', usageMonth).maybeSingle()
-    if (!premium && (usage?.links_used || 0) >= 3) throw new Error('Free link limit reached: 3 links this month. Upgrade to Premium for more.')
+    const { data: usage } = await supabase.from('usage_monthly').select('link_imports_used').eq('user_id', userData.user.id).eq('usage_month', usageMonth).maybeSingle()
+    const linkLimit = premium ? 30 : 3
+    if ((usage?.link_imports_used || 0) >= linkLimit) throw new Error(`${premium ? 'Premium' : 'Free'} link limit reached: ${linkLimit} links this month.`)
     const { url } = await req.json()
     if (!/^https?:\/\//i.test(url)) throw new Error('Only http and https links are supported.')
     const response = await fetch(url, { headers: { 'User-Agent': 'SparkStudyReader/1.0' }, redirect: 'follow' })
@@ -37,10 +38,8 @@ Deno.serve(async (req) => {
     const title = new URL(url).hostname.replace(/^www\./, '')
     const { data: material, error } = await supabase.from('materials').insert({ user_id: userData.user.id, title, file_name: url, storage_path: `link:${url}`, mime_type: 'text/html', size_bytes: extractedText.length, status: 'ready', extracted_text: extractedText }).select('id,title').single()
     if (error) throw error
-    if (!premium) {
-      await supabase.from('link_usage').upsert({ user_id: userData.user.id, usage_month: usageMonth, links_used: (usage?.links_used || 0) + 1 }, { onConflict: 'user_id,usage_month' })
-    }
-    return new Response(JSON.stringify({ material, premium, linksRemaining: premium ? null : Math.max(0, 2 - (usage?.links_used || 0)) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    await supabase.from('usage_monthly').upsert({ user_id: userData.user.id, usage_month: usageMonth, link_imports_used: (usage?.link_imports_used || 0) + 1 }, { onConflict: 'user_id,usage_month' })
+    return new Response(JSON.stringify({ material, premium, linksRemaining: Math.max(0, linkLimit - ((usage?.link_imports_used || 0) + 1)) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Could not read this link.'
     console.error('read-link failed:', message)
