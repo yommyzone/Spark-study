@@ -33,7 +33,7 @@ function updateAuthUI(session) {
 
 async function loadDashboardData(session) {
   if (!session || !sparkClient) return;
-  const { data: sessions, error } = await sparkClient.from('study_sessions').select('*').order('completed_at', { ascending: false }).limit(50);
+  const { data: sessions, error } = await sparkClient.from('study_sessions').select('*, materials(title)').order('completed_at', { ascending: false }).limit(50);
   if (error || !sessions) return;
   const questions = sessions.reduce((sum, item) => sum + (item.total_questions || 0), 0);
   const correct = sessions.reduce((sum, item) => sum + (item.score || 0), 0);
@@ -52,12 +52,17 @@ async function loadDashboardData(session) {
   set('statStreak', `${uniqueDays.length} day${uniqueDays.length === 1 ? '' : 's'}`);
   set('statMastery', `${mastery}%`);
   set('statMasteryFoot', questions ? `${correct} correct answer${correct === 1 ? '' : 's'} recorded` : 'Your first score starts here');
+  const recommended = sessions.find(item => item.materials?.title)?.materials?.title;
+  const recommendedTitle = document.getElementById('recommendedTitle');
+  const recommendedDescription = document.getElementById('recommendedDescription');
+  if (recommendedTitle && recommended) recommendedTitle.textContent = recommended;
+  if (recommendedDescription && recommended) recommendedDescription.textContent = 'Continue studying from your latest uploaded material.';
   const activity = document.querySelector('.activity-list');
   if (activity && sessions.length) activity.innerHTML = sessions.slice(0, 3).map(item => {
     const score = `${item.score || 0}/${item.total_questions || 0}`;
     const percent = item.total_questions ? Math.round((item.score / item.total_questions) * 100) : 0;
     const date = new Date(item.completed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    return `<div class="activity-row"><div class="activity-icon biology">⌬</div><div class="activity-copy"><strong>Biology session</strong><span>Quiz completed · ${date}</span></div><div class="activity-score"><strong>${score}</strong><span>${percent}%</span></div><div class="mini-progress"><span style="width:${percent}%"></span></div></div>`;
+    return `<div class="activity-row"><div class="activity-icon biology">⌬</div><div class="activity-copy"><strong>${escapeHtml(item.materials?.title || 'Spark session')}</strong><span>Quiz completed · ${date}</span></div><div class="activity-score"><strong>${score}</strong><span>${percent}%</span></div><div class="mini-progress"><span style="width:${percent}%"></span></div></div>`;
   }).join('');
 }
 
@@ -127,10 +132,17 @@ function showToast(message) {
   window.toastTimer = setTimeout(() => toast.classList.remove('show'), 2800);
 }
 
-document.getElementById('startSession').addEventListener('click', () => modal.classList.add('show'));
+document.getElementById('startSession').addEventListener('click', async () => {
+  if (sparkClient) {
+    const { data: latestMaterials = [] } = await sparkClient.from('materials').select('id').order('created_at', { ascending: false }).limit(1);
+    if (latestMaterials[0]) { startMaterialQuiz(latestMaterials[0].id); return; }
+  }
+  modal.classList.add('show');
+});
 document.getElementById('closeModal').addEventListener('click', () => modal.classList.remove('show'));
 document.getElementById('later').addEventListener('click', () => modal.classList.remove('show'));
 let activeQuizTitle = 'Biology: Cell structure';
+let activeMaterialId = null;
 let quizQuestions = [
   { topic: 'Cell structure', question: 'Which organelle is known as the powerhouse of the cell?', options: ['Nucleus', 'Mitochondrion', 'Ribosome', 'Cell wall'], answer: 1, explanation: 'Mitochondria produce most of the cell’s ATP, the usable energy that powers cellular work.' },
   { topic: 'Cell structure', question: 'What is the main function of the cell membrane?', options: ['Produce proteins', 'Store genetic material', 'Control what enters and leaves the cell', 'Release energy from glucose'], answer: 2, explanation: 'The selectively permeable cell membrane regulates movement of substances into and out of the cell.' },
@@ -142,6 +154,8 @@ let quizState = { index: 0, score: 0, answered: false };
 document.getElementById('begin').addEventListener('click', () => {
   modal.classList.remove('show');
   quizState = { index: 0, score: 0, answered: false };
+  activeMaterialId = null;
+  activeQuizTitle = 'Biology: Cell structure';
   renderQuiz();
 });
 
@@ -189,7 +203,7 @@ function nextQuestion() {
 async function saveSessionToSupabase(score, totalQuestions) {
   const { data: userData, error: userError } = await sparkClient.auth.getUser();
   if (userError || !userData.user) { showToast('Please sign in again before saving this session.'); return; }
-  const { error } = await sparkClient.from('study_sessions').insert({ user_id: userData.user.id, score, total_questions: totalQuestions, duration_seconds: 0 });
+  const { error } = await sparkClient.from('study_sessions').insert({ user_id: userData.user.id, material_id: activeMaterialId, score, total_questions: totalQuestions, duration_seconds: 0 });
   if (error) {
     console.error('Spark Study session save failed:', error);
     showToast(`Could not save session: ${error.message}`);
@@ -288,6 +302,7 @@ async function startMaterialQuiz(materialId) {
   }
   if (!questions.length) { showToast('No quiz questions were generated for this material.'); return; }
   activeQuizTitle = material.title;
+  activeMaterialId = materialId;
   quizQuestions = questions.map(item => ({ topic: material.title, question: item.question, options: item.options || [], answer: Number(item.answer), explanation: item.explanation || 'Review the material and try this question again.' }));
   quizState = { index: 0, score: 0, answered: false };
   renderQuiz();
